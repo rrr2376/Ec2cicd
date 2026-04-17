@@ -34,5 +34,6 @@ jobs:
             cd Ec2cicd
             git pull origin main
             npm install
+            npm install -g serve
             npm run build -- --configuration production
             pm2 restart angular-app
