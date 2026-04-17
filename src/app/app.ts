@@ -8,5 +8,5 @@ import { RouterOutlet } from '@angular/router';
   styleUrl: './app.css'
 })
 export class App {
-  protected readonly title = signal('ec2-cicd-app');
+  protected readonly title = signal('ec2-cicd-app by bhautik');
 }
