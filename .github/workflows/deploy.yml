@@ -1,23 +1,56 @@
-script: |
-  cd Ec2cicd
+name: Deploy Angular to EC2
 
-  echo "Pull latest code"
-  git pull origin main
+on:
+  push:
+    branches:
+      - main
 
-  echo "Clean old build"
-  rm -rf dist
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
 
-  echo "Install dependencies"
-  npm install
+    steps:
+      # 1. Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-  echo "Build Angular app"
-  npm run build -- --configuration production
+      # 2. Setup Node
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 24
 
-  echo "Install serve (if not installed)"
-  npm install -g serve
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: npm install
 
-  echo "Restart PM2"
-  pm2 delete angular-app || true
-  pm2 start "serve -s dist/ec2-cicd-app/browser -l 3000" --name angular-app
+      # 4. Build Angular app
+      - name: Build Angular app
+        run: npm run build -- --configuration production
 
-  pm2 save
+      # 5. Copy build to EC2
+      - name: Copy files to EC2
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "dist/ec2-cicd-app/browser/*"
+          target: "/home/ubuntu/Ec2cicd"
+
+      # 6. Restart app on EC2
+      - name: Restart app on EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd Ec2cicd
+
+            npm install -g serve
+
+            pm2 delete angular-app || true
+            pm2 start "serve -s . -l 3000" --name angular-app
+
+            pm2 save
