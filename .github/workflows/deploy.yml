@@ -1,4 +1,4 @@
-name: Deploy Angular to EC2 (Nginx)
+name: Deploy Angular to EC2 (Nginx - Production)
 
 on:
   push:
@@ -18,37 +18,54 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
-          node-version: 24
+          node-version: 20
 
-      # 3. Install deps
+      # 3. Install dependencies
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      # 4. Build Angular
-      - name: Build Angular
+      # 4. Build Angular (production)
+      - name: Build Angular app
         run: npm run build -- --configuration production
 
-      # 5. Verify build
-      - name: Check build
-        run: ls -R dist
+      # 5. Debug build (optional but useful)
+      - name: Verify build output
+        run: ls -R dist/ec2-cicd-app/browser
 
-      # 6. Copy build DIRECTLY to nginx folder (IMPORTANT FIX)
-      - name: Copy files to EC2
-        uses: appleboy/scp-action@v0.1.4
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "dist/ec2-cicd-app/browser/*"
-          target: "/var/www/angular-app"
-
-      # 7. Fix permissions + restart nginx
-      - name: Restart Nginx
+      # 6. Clean target folder on EC2
+      - name: Prepare EC2 directory
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            sudo mkdir -p /var/www/angular-app
+            sudo rm -rf /var/www/angular-app/*
+
+      # 7. Copy build files (FIXED - no tar error)
+      - name: Copy build to EC2
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "dist/ec2-cicd-app/browser/*"
+          target: "/home/ubuntu/"
+          strip_components: 3
+
+      # 8. Move to Nginx + restart
+      - name: Deploy to Nginx
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sudo cp -r /home/ubuntu/* /var/www/angular-app/
             sudo chown -R www-data:www-data /var/www/angular-app
+            sudo chmod -R 755 /var/www/angular-app
             sudo systemctl restart nginx
+
+            # cleanup (optional but recommended)
+            rm -rf /home/ubuntu/*.html /home/ubuntu/*.js /home/ubuntu/*.css /home/ubuntu/*.ico
