@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout
+      # 1. Checkout code
       - name: Checkout code
         uses: actions/checkout@v3
 
@@ -24,15 +24,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 4. Build Angular (production)
+      # 4. Build Angular app
       - name: Build Angular app
         run: npm run build -- --configuration production
 
-      # 5. Debug build (optional but useful)
+      # 5. Verify build (debug)
       - name: Verify build output
         run: ls -R dist/ec2-cicd-app/browser
 
-      # 6. Clean target folder on EC2
+      # 6. Clean server folder
       - name: Prepare EC2 directory
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -40,21 +40,20 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo mkdir -p /var/www/angular-app
             sudo rm -rf /var/www/angular-app/*
+            sudo mkdir -p /var/www/angular-app
 
-      # 7. Copy build files (FIXED - no tar error)
+      # 7. Copy ONLY Angular build folder
       - name: Copy build to EC2
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "dist/ec2-cicd-app/browser/*"
-          target: "/home/ubuntu/"
-          strip_components: 3
+          source: "dist/ec2-cicd-app/browser"
+          target: "/home/ubuntu"
 
-      # 8. Move to Nginx + restart
+      # 8. Move correct files to Nginx
       - name: Deploy to Nginx
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -62,10 +61,12 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo cp -r /home/ubuntu/* /var/www/angular-app/
+            sudo cp -r /home/ubuntu/dist/ec2-cicd-app/browser/* /var/www/angular-app/
+
             sudo chown -R www-data:www-data /var/www/angular-app
             sudo chmod -R 755 /var/www/angular-app
+
             sudo systemctl restart nginx
 
-            # cleanup (optional but recommended)
-            rm -rf /home/ubuntu/*.html /home/ubuntu/*.js /home/ubuntu/*.css /home/ubuntu/*.ico
+            # cleanup uploaded build
+            rm -rf /home/ubuntu/dist
